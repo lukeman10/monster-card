@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Card Collector</title>
+
+<!-- PWA meta -->
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monster Card Collector</title>
-
 <style>
+/* ---- GENERAL STYLING ---- */
 body {
   font-family: sans-serif;
-  background: #222;
+  background: linear-gradient(135deg, #222, #111, #222);
   color: #fff;
   text-align: center;
   margin: 0;
@@ -21,11 +23,12 @@ body {
 }
 
 h1 { margin-top: 20px; }
-
 #cooldown { margin: 10px 0; font-size: 16px; }
-
 #boosterButtons { margin-bottom: 20px; }
+#cards { display: flex; flex-wrap: wrap; justify-content: center; }
+h2 { width: 100%; text-align: left; margin-left: 20px; }
 
+/* ---- BUTTONS ---- */
 button {
   margin: 5px;
   padding: 10px 20px;
@@ -33,19 +36,18 @@ button {
   border: none;
   border-radius: 10px;
   cursor: pointer;
+  transition: transform 0.1s ease, background 0.2s ease;
 }
-
-button:disabled {
+button:active {
+  transform: scale(0.95);
   background: #555;
+}
+button:disabled {
+  background: #444;
   cursor: not-allowed;
 }
 
-#cards {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
+/* ---- CARDS ---- */
 canvas.card {
   width: 100px;
   height: 140px;
@@ -53,16 +55,37 @@ canvas.card {
   border-radius: 10px;
   background: #333;
   touch-action: manipulation;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+canvas.card:hover, canvas.card:active {
+  transform: scale(1.1);
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.3);
+  z-index: 10;
 }
 
-h2 {
-  width: 100%;
-  text-align: left;
-  margin-left: 20px;
+/* ---- CARD GLOW BASED ON RARITY ---- */
+canvas.card[data-rarity="Rare"] { box-shadow: 0 0 8px #4fc3f7; }
+canvas.card[data-rarity="Epic"] { box-shadow: 0 0 10px #ba68c8; }
+canvas.card[data-rarity="Legendary"] { box-shadow: 0 0 12px gold; }
+
+/* ---- PULSING NEW BADGE ---- */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+canvas.card.new::after {
+  content: "NEW";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  color: gold;
+  font-weight: bold;
+  animation: pulse 1s infinite;
 }
 
-/* -------- DUPLICATE MODAL -------- */
-
+/* ---- DUPLICATE MODAL ---- */
 #dupeModal {
   position: fixed;
   inset: 0;
@@ -72,7 +95,6 @@ h2 {
   align-items: center;
   z-index: 999;
 }
-
 #dupeContent {
   background: #111;
   padding: 20px;
@@ -81,13 +103,11 @@ h2 {
   max-height: 90vh;
   overflow-y: auto;
 }
-
 #dupeCards {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
 }
-
 .closeBtn {
   margin-top: 10px;
   padding: 10px 20px;
@@ -114,6 +134,9 @@ h2 {
   </div>
 </div>
 
+<!-- INSTALL BUTTON -->
+
+
 <script>
 // ---------- VERSION RESET ----------
 const COLLECTION_VERSION = 2;
@@ -136,6 +159,9 @@ const cardsContainer = document.getElementById("cards");
 const dupeModal = document.getElementById("dupeModal");
 const dupeCardsDiv = document.getElementById("dupeCards");
 const dupeTitle = document.getElementById("dupeTitle");
+
+const installBtn = document.getElementById("installBtn");
+let deferredPrompt;
 
 // ---------- LOAD CARDS ----------
 fetch("cards.json")
@@ -244,6 +270,7 @@ function drawCanvasCard(container, card, count){
   canvas.className = "card";
   canvas.width = 100;
   canvas.height = 140;
+  canvas.dataset.rarity = card.rarity;
 
   const ctx = canvas.getContext("2d");
   drawShape(ctx, card.color, card.shape);
@@ -255,14 +282,9 @@ function drawCanvasCard(container, card, count){
   ctx.fillText(card.rarity, 50, 122);
 
   if (count > 1) {
-    ctx.font = "bold 12px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(`x${count}`, 5, 15);
     canvas.onclick = () => showDuplicates(card, count);
   } else {
-    ctx.fillStyle = "gold";
-    ctx.textAlign = "right";
-    ctx.fillText("NEW", 95, 15);
+    canvas.classList.add("new");
   }
 
   container.appendChild(canvas);
@@ -331,10 +353,16 @@ function drawShape(ctx, color, shape){
   }
   ctx.fill();
 }
+
+// ---------- SERVICE WORKER (PWA) ----------
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js")
     .catch(err => console.log("SW failed", err));
 }
+
+// ---------- INSTALL BUTTON ----------
+// iOS instructions
+
 
 </script>
 
