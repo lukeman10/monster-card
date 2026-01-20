@@ -281,14 +281,24 @@ function drawCanvasCard(container, card, count){
   ctx.fillText(card.name, 50, 110);
   ctx.fillText(card.rarity, 50, 122);
 
-  if (count > 1) {
+  // ----- DUPLICATE COUNTER / NEW BADGE -----
+  if (count > 1){
+    // Draw duplicate count in top-left corner
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`x${count}`, 5, 15);
+
+    // Clickable to show duplicates
     canvas.onclick = () => showDuplicates(card, count);
   } else {
+    // Single copy = animated NEW badge via CSS
     canvas.classList.add("new");
   }
 
   container.appendChild(canvas);
 }
+
 
 // ---------- DUPLICATES ----------
 function showDuplicates(card, count){
