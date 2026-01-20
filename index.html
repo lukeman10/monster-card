@@ -6,6 +6,7 @@
 <title>Monster Card Collector</title>
 
 <!-- PWA meta -->
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -134,15 +135,13 @@ canvas.card.new::after {
   </div>
 </div>
 
-<!-- INSTALL BUTTON -->
-
-
 <script>
 // ---------- VERSION RESET ----------
 const COLLECTION_VERSION = 2;
 if ((parseInt(localStorage.getItem("collectionVersion")) || 0) < COLLECTION_VERSION) {
   localStorage.removeItem("cardCollection");
   localStorage.removeItem("nextBooster");
+  localStorage.removeItem("nextSuperBooster");
   localStorage.setItem("collectionVersion", COLLECTION_VERSION);
 }
 
@@ -150,7 +149,10 @@ if ((parseInt(localStorage.getItem("collectionVersion")) || 0) < COLLECTION_VERS
 let cards = [];
 let collection = JSON.parse(localStorage.getItem("cardCollection")) || [];
 let nextBooster = parseInt(localStorage.getItem("nextBooster") || 0);
+let nextSuperBooster = parseInt(localStorage.getItem("nextSuperBooster") || 0);
+
 const COOLDOWN_MS = 10 * 60 * 1000;
+const SUPER_COOLDOWN_MS = 2 * 24 * 60 * 60 * 1000;
 
 const cooldownEl = document.getElementById("cooldown");
 const boosterDiv = document.getElementById("boosterButtons");
@@ -160,15 +162,13 @@ const dupeModal = document.getElementById("dupeModal");
 const dupeCardsDiv = document.getElementById("dupeCards");
 const dupeTitle = document.getElementById("dupeTitle");
 
-const installBtn = document.getElementById("installBtn");
-let deferredPrompt;
-
 // ---------- LOAD CARDS ----------
 fetch("cards.json")
   .then(res => res.json())
   .then(data => {
     cards = data;
     setupBoosterButtons();
+    setupSuperButton();
     updateCollectionUI();
   });
 
@@ -184,15 +184,23 @@ function setupBoosterButtons(){
   });
 }
 
-// ---------- COOLDOWN ----------
+// ---------- SUPER PACK BUTTON ----------
+function setupSuperButton(){
+  const btn = document.createElement("button");
+  btn.id = "btn-super";
+  btn.innerText = "Open SUPER Pack";
+  btn.onclick = openSuperPack;
+  boosterDiv.appendChild(btn);
+}
+
+// ---------- COOLDOWN UPDATE ----------
 setInterval(() => {
   const remaining = nextBooster - Date.now();
-  const disabled = remaining > 0;
   const seriesList = [...new Set(cards.map(c => c.series))];
 
   seriesList.forEach(series => {
     const btn = document.getElementById(`btn-${series}`);
-    if (btn) btn.disabled = disabled;
+    if (btn) btn.disabled = remaining > 0;
   });
 
   const mins = Math.floor(Math.max(remaining,0)/60000);
@@ -200,9 +208,24 @@ setInterval(() => {
   cooldownEl.innerText = remaining > 0
     ? `Next booster available: ${mins}:${secs.toString().padStart(2,"0")}`
     : "Booster available!";
+
+  // Super Pack cooldown
+  const remainingSuper = nextSuperBooster - Date.now();
+  const superBtn = document.getElementById("btn-super");
+  if (superBtn) superBtn.disabled = remainingSuper > 0;
+  if (superBtn) {
+    if (remainingSuper > 0) {
+      const minsS = Math.floor(remainingSuper/60000);
+      const secsS = Math.floor((remainingSuper%60000)/1000);
+      superBtn.innerText = `Super Pack available in: ${minsS}:${secsS.toString().padStart(2,"0")}`;
+    } else {
+      superBtn.innerText = "Open SUPER Pack";
+    }
+  }
+
 }, 1000);
 
-// ---------- OPEN PACK ----------
+// ---------- OPEN SERIES PACK ----------
 function openSeriesPack(series){
   if (Date.now() < nextBooster) return;
 
@@ -223,6 +246,55 @@ function openSeriesPack(series){
   alert(`You opened a ${series} pack:\n` +
     pack.map(c => `${c.name} (${c.rarity})`).join("\n"));
 }
+
+// ---------- OPEN SUPER PACK ----------
+function openSuperPack(){
+  if (Date.now() < nextSuperBooster) return;
+
+  // 1️⃣ Series you own at least 1 card
+  const ownedSeries = [...new Set(collection.map(c => c.series))];
+
+  // 2️⃣ Cards in those series that you don't have yet
+  let possibleCards = cards.filter(c =>
+    ownedSeries.includes(c.series) && !collection.some(d => d.id === c.id)
+  );
+
+  // 3️⃣ If no cards in owned series available (all full), fallback to unowned cards from other series
+  if (possibleCards.length === 0){
+    possibleCards = cards.filter(c => !collection.some(d => d.id === c.id));
+  }
+
+  // 4️⃣ If still nothing left, fallback to duplicates
+  let pack = [];
+  const count = Math.random() < 0.8 ? 1 : 2;
+
+  if (possibleCards.length > 0){
+    for (let i=0;i<count;i++){
+      if (possibleCards.length === 0) break;
+      const index = Math.floor(Math.random()*possibleCards.length);
+      pack.push(possibleCards[index]);
+      possibleCards.splice(index,1);
+    }
+  }
+
+  if (pack.length === 0){
+    // all cards owned → give duplicates
+    for (let i=0;i<count;i++){
+      pack.push(cards[Math.floor(Math.random()*cards.length)]);
+    }
+  }
+
+  collection.push(...pack);
+  localStorage.setItem("cardCollection", JSON.stringify(collection));
+
+  nextSuperBooster = Date.now() + SUPER_COOLDOWN_MS;
+  localStorage.setItem("nextSuperBooster", nextSuperBooster);
+
+  updateCollectionUI();
+  alert(`You opened a SUPER Pack:\n` +
+    pack.map(c => `${c.name} (${c.rarity})`).join("\n"));
+}
+
 
 // ---------- RARITY ----------
 function getRandomCardFromSeries(seriesCards){
@@ -281,24 +353,19 @@ function drawCanvasCard(container, card, count){
   ctx.fillText(card.name, 50, 110);
   ctx.fillText(card.rarity, 50, 122);
 
-  // ----- DUPLICATE COUNTER / NEW BADGE -----
   if (count > 1){
-    // Draw duplicate count in top-left corner
     ctx.fillStyle = "#fff";
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(`x${count}`, 5, 15);
 
-    // Clickable to show duplicates
     canvas.onclick = () => showDuplicates(card, count);
   } else {
-    // Single copy = animated NEW badge via CSS
     canvas.classList.add("new");
   }
 
   container.appendChild(canvas);
 }
-
 
 // ---------- DUPLICATES ----------
 function showDuplicates(card, count){
@@ -369,11 +436,6 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js")
     .catch(err => console.log("SW failed", err));
 }
-
-// ---------- INSTALL BUTTON ----------
-// iOS instructions
-
-
 </script>
 
 </body>
